@@ -152,6 +152,20 @@ describe("PCC", () => {
         ]);
       });
     });
+    describe("parseArguments", () => {
+      it("should recognize number of arguments", () => {
+        expect(pcc.parseArguments("5, 10, 15").params.length).to.equal(3);
+        expect(pcc.parseArguments("").params.length).to.equal(0);
+      });
+      it("should parse arguments types", () => {
+        expect(pcc.parseArguments("5")).to.deep.equal({ index: 1, params: [ 5 ] });
+        expect(pcc.parseArguments('"5"')).to.deep.equal({ index: 3, params: [ "5" ] });
+      });
+      it("should parse objects and arrays", () => {
+        expect(pcc.parseArguments("[1, 2, 3]")).to.deep.equal({ index: 9, params: [ [ 1, 2, 3 ] ] });
+        expect(pcc.parseArguments('{name: "value"}')).to.deep.equal({ index: 15, params: [ { name: "value" } ] });
+      });
+    });
     describe("buildField", () => {
       it("should always add name and modifiers", () => {
         let field = pcc.buildField([ "modifier" ], "name");
@@ -187,6 +201,30 @@ describe("PCC", () => {
 }`;
         expect(() => pcc.getParamsData(classDefinition, classDefinition.indexOf("test2(") + 5))
           .to.throw(`Parenthesis has no closing at line 3.`);
+      });
+    });
+    describe("getDecoratorData", () => {
+      it("should recognize decorators name and position", () => {
+        expect(pcc.getDecoratorData("@attr readonly name: string;")).to.deep.equal({
+          index: 5,
+          decorator: {
+            name: "attr"
+          }
+        });
+        expect(pcc.getDecoratorData("@empty() readonly name: string;")).to.deep.equal({
+          index: 8, decorator: { name: "empty", params: [] }
+        });
+      });
+      it("should read and parse parameters of decorator generator", () => {
+        expect(pcc.getDecoratorData("@num(5) readonly name: string;")).to.deep.equal({
+          index: 7, decorator: { name: "num", params: [ 5 ] }
+        });
+        expect(pcc.getDecoratorData(`@str("5") readonly name: string;`)).to.deep.equal({
+          index: 9, decorator: { name: "str", params: [ "5" ] }
+        });
+        expect(pcc.getDecoratorData(`@obj({type: String}) readonly name: string;`)).to.deep.equal({
+          index: 20, decorator: { name: "obj", params: [ {type: String} ] }
+        });
       });
     });
     describe("parseDTS", () => {

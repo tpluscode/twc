@@ -81,7 +81,13 @@ function findClosing(src, ptr, brackets) {
         break;
     }
   }
-  return -1;
+  let line = 1;
+  for (let i = 0, l = ptr; i < l; i++) {
+    if (/\n/.test(src.charAt(i))) {
+      line++;
+    }
+  }
+  throw new SyntaxError(`Parenthesis has no closing at line ${line}.`);
 }
 
 findClosing.OBJECT = "{}";
@@ -90,7 +96,7 @@ findClosing.GENERIC = "<>";
 findClosing.PARENTHESIS = "()";
 
 exports.regExpClosestIndexOf = regExpClosestIndexOf;
-function regExpClosestIndexOf(src, index, chars = /;|:|\(/) {
+function regExpClosestIndexOf(src, index = 0, chars = /;|:|\(/) {
   let char;
   while ((char = src.charAt(index))) {
     let match = char.match(chars);
@@ -127,11 +133,20 @@ function goTo(src, term, index = 0) {
   let char;
   while ((char = src.charAt(index))) {
     switch (char) {
-      case term: return index;
-      case "{": index = findClosing(src, index, findClosing.OBJECT); break;
-      case "[": index = findClosing(src, index, findClosing.ARRAY); break;
-      case "<": index = findClosing(src, index, findClosing.GENERIC); break;
-      case "(": index = findClosing(src, index, findClosing.PARENTHESIS); break;
+      case term:
+        return index;
+      case "{":
+        index = findClosing(src, index, findClosing.OBJECT);
+        break;
+      case "[":
+        index = findClosing(src, index, findClosing.ARRAY);
+        break;
+      case "<":
+        index = findClosing(src, index, findClosing.GENERIC);
+        break;
+      case "(":
+        index = findClosing(src, index, findClosing.PARENTHESIS);
+        break;
     }
     index++;
   }
@@ -274,6 +289,39 @@ function parseParams(src, from = 0, to = src.length) {
   return params;
 }
 
+exports.parseArguments = parseArguments;
+function parseArguments(src, index = 0, end = src.length) {
+  let char, params = [];
+  let ptr = index;
+  let stop = false;
+  while (!stop && index < end) {
+    switch ((char = src.charAt(index))) {
+      case ",":
+        params.push(src.slice(ptr, index).trim());
+        ptr = ++index;
+        break;
+      case "{":
+        index = findClosing(src, index, findClosing.OBJECT);
+        break;
+      case "[":
+        index = findClosing(src, index, findClosing.ARRAY);
+        break;
+      case "<":
+        index = findClosing(src, index, findClosing.GENERIC);
+        break;
+      case "(":
+        index = findClosing(src, index, findClosing.PARENTHESIS);
+        break;
+    }
+    index++;
+  }
+
+  if (index > ptr) {
+    params.push(src.slice(ptr, index).trim());
+  }
+  return { params: params.map(param => Function(`return ${param};`)()), index };
+}
+
 exports.buildField = buildField;
 function buildField(modifiers, name, params, type) {
   let config = { name };
@@ -287,21 +335,31 @@ function buildField(modifiers, name, params, type) {
 }
 
 exports.getParamsData = getParamsData;
-function getParamsData(dts, ptr = 0) {
-  let closeIndex = findClosing(dts, ptr, "()");
-  if (closeIndex === -1) {
-    let line = 1;
-    for (let i = 0, l = ptr; i < l; i++) {
-      if (/\n/.test(dts.charAt(i))) {
-        line++;
-      }
-    }
-    throw new SyntaxError(`Parenthesis has no closing at line ${line}.`);
-  }
+function getParamsData(src, ptr = 0) {
+  let closeIndex = findClosing(src, ptr, findClosing.PARENTHESIS);
 
   // find the colon to start searching for type
-  let params = parseParams(dts, ptr + 1, closeIndex);
+  let params = parseParams(src, ptr + 1, closeIndex);
   return { closeIndex, params };
+}
+
+exports.getDecoratorData = getDecoratorData;
+function getDecoratorData(src, index = 0) {
+  let decorator;
+  // We assume that there is no space between decorator name and eventual parameters
+  if (src.startsWith("@", index)) {
+    let { found, index: start } = regExpClosestIndexOf(src, index + 1, / |\(/);
+    decorator = { name: src.slice(index + 1, start).trim() };
+    if (found === "(") {
+      let {index: end, params} = parseArguments(src, start + 1, findClosing(src, start, findClosing.PARENTHESIS));
+      decorator.params = params;
+      index = end + 1;
+    } else {
+      index = start;
+    }
+  }
+
+  return { index, decorator };
 }
 
 exports.parseDTS = parseDTS;
@@ -327,7 +385,7 @@ function parseDTS(dts) {
     // post-actions
     char = dts.charAt(++ptr)
   ) {
-    let params, match/*, decorator*/;
+    let params, match, decorator;
     // skip whitespace
     let from = ptr = regExpIndexOf(dts, ptr);
 
@@ -337,18 +395,7 @@ function parseDTS(dts) {
     }
 
     // TODO: decorators detection here
-//    if (dts.startsWith("@", ptr)) {
-//      let decoratorEnd = regExpClosestIndexOf(dts, ptr, / |\(/);
-//      decorator = { name: dts.slice(ptr, decoratorEnd.index) };
-//      if (decoratorEnd.found === "(") {
-//        let closeIndex;
-//        ({ params, closeIndex } = getParamsData(dts, ptr));
-//        decorator.params = params;
-//        ptr = closeIndex + 1;
-//      } else {
-//        ptr = decoratorEnd.index;
-//      }
-//    }
+    ({ index: ptr, decorator } = getDecoratorData(dts, ptr));
 
     // find next stop (semicolon for the end of line, colon for end of prop name, parenthesis for end of method name
     ({ index: ptr, found: match } = regExpClosestIndexOf(dts, ptr));
