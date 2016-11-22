@@ -55,6 +55,7 @@ function clean() {
 
 exports.lint = lint;
 function lint() {
+  //noinspection JSCheckFunctionSignatures
   return new Promise((resolve, reject) => gulp
     .src(srcs)
     .pipe(tslint({ formatter: "prose" }))
@@ -86,6 +87,7 @@ function findClosing(src, ptr, brackets) {
 findClosing.OBJECT = "{}";
 findClosing.ARRAY = "[]";
 findClosing.GENERIC = "<>";
+findClosing.PARENTHESIS = "()";
 
 exports.regExpClosestIndexOf = regExpClosestIndexOf;
 function regExpClosestIndexOf(src, index, chars = /;|:|\(/) {
@@ -120,6 +122,22 @@ function getPropertyNoType(src, from, to) {
   return { name, modifiers };
 }
 
+exports.goTo = goTo;
+function goTo(src, term, index = 0) {
+  let char;
+  while ((char = src.charAt(index))) {
+    switch (char) {
+      case term: return index;
+      case "{": index = findClosing(src, index, findClosing.OBJECT); break;
+      case "[": index = findClosing(src, index, findClosing.ARRAY); break;
+      case "<": index = findClosing(src, index, findClosing.GENERIC); break;
+      case "(": index = findClosing(src, index, findClosing.PARENTHESIS); break;
+    }
+    index++;
+  }
+  return -1;
+}
+
 exports.getType = getType;
 function getType(src, from = 0) {
   let start = regExpIndexOf(src, from);
@@ -128,9 +146,20 @@ function getType(src, from = 0) {
   let types = [];
   let char;
   let type;
+  let defaultValue;
 
   while (!done && (char = src.charAt(index))) {
     switch (char) {
+      case "=":
+        let pos = goTo(src, ";", index);
+        defaultValue = src.slice(index + 1, pos).trim();
+        type = src.slice(start, index).trim();
+        if (type.length > 0) {
+          types.push(type);
+        }
+        index = pos;
+        done = true;
+        break;
       case ")":
       case ",":
       case ";":
@@ -195,14 +224,18 @@ function getType(src, from = 0) {
       return type;
     }
     if (result !== type) {
-      return TYPES.OBJECT
+      return TYPES.OBJECT;
     }
     return type;
   }, null);
   if (TYPES.IS_PRIMITIVE(type)) {
     type = `${type.charAt(0).toUpperCase()}${type.substr(1)}`;
   }
-  return { type, end: index };
+  if (defaultValue === undefined) {
+    return { type, end: index };
+  } else {
+    return { type, defaultValue, end: index };
+  }
 }
 
 exports.arrToObject = arrToObject;
@@ -294,7 +327,7 @@ function parseDTS(dts) {
     // post-actions
     char = dts.charAt(++ptr)
   ) {
-    let params, match, decorator;
+    let params, match/*, decorator*/;
     // skip whitespace
     let from = ptr = regExpIndexOf(dts, ptr);
 
@@ -390,7 +423,7 @@ function buildHTML() {
           return Buffer.from(
             links.map(module => `<link rel="import" href="${module}">\n`).join("") +
             scripts.map(module => `<script src="${module}"></script>\n`).join("") +
-            `<script>\n${content}\n</script>`
+            "<script>\n" + content + "\n</script>"
           );
         }))
         .pipe(rename({ extname: ".html" }))
