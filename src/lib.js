@@ -66,6 +66,7 @@ function lint() {
 
 exports.findClosing = findClosing;
 function findClosing(src, ptr, brackets) {
+  let start = ptr;
   let opened = 1;
   let char;
   while ((char = src.charAt(++ptr))) {
@@ -82,7 +83,7 @@ function findClosing(src, ptr, brackets) {
     }
   }
   let line = 1;
-  for (let i = 0, l = ptr; i < l; i++) {
+  for (let i = 0, l = start; i < l; i++) {
     if (/\n/.test(src.charAt(i))) {
       line++;
     }

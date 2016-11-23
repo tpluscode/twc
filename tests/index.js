@@ -17,10 +17,10 @@ describe("PCC", () => {
         expect(pcc.findClosing("(.[.].)", 0, "()")).to.equal(6);
         expect(pcc.findClosing("(.(.).)()", 0, "()")).to.equal(6);
       });
-      it("should return -1 if no closing bracket was found", () => {
-        expect(pcc.findClosing("(...", 0, "()")).to.equal(-1);
-        expect(pcc.findClosing("...", 0, "()")).to.equal(-1);
-        expect(pcc.findClosing("", 0, "()")).to.equal(-1);
+      it("should throw an error if no closing bracket was found", () => {
+        expect(() => pcc.findClosing("(...", 0, "()")).to.throw(`Parenthesis has no closing at line 1.`);
+        expect(() => pcc.findClosing("...", 0, "()")).to.throw(`Parenthesis has no closing at line 1.`);
+        expect(() => pcc.findClosing("", 0, "()")).to.throw(`Parenthesis has no closing at line 1.`);
       });
     });
     describe("regExpClosestIndexOf", () => {
@@ -112,7 +112,7 @@ describe("PCC", () => {
         testType(`"yep" | "nope"`, "String");
       });
       it("should return type null and index -1 if there was an error parsing the template", () => {
-        testType("{test: boolean", null, -1);
+        expect(() => pcc.getType("{test: boolean;")).to.throw(`Parenthesis has no closing at line 1.`);
       });
       it("should recognize default value", () => {
         expect(pcc.getType(`string = "value";`)).to.deep.equal({ type: "String", end: 16, defaultValue: '"value"' });
